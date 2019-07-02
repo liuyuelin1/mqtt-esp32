@@ -4,8 +4,6 @@ from simple import MQTTClient
 from machine import Pin
 import network 
 import time
-import _thread
-
 
 #配置版本号
 VERSION = "V0.0.5"
@@ -41,18 +39,18 @@ command_topic={
 }
 
 #mqtt配置
-USER = "TEST"
+USER = "xensyz"
 PWD = "TEST"
 MQTTHOST = "www.eniac.shop"
 MQTTPORT = 11883
-mqttClient = MQTTClient("switchserver0", MQTTHOST, MQTTPORT, USER, PWD)
-ping_index=0
-ping_cycle=100
-ping_flag=0
+mqttClient = MQTTClient("switchserver0123", MQTTHOST, MQTTPORT, USER, PWD)
+mqtt_retry_cnt=0
+mqtt_retry_maxcnt=10
 
-#heartbeat 配置
-heartbeat_index=0
-heartbeat_cycle=1200
+#ping参数
+ping_index=0
+ping_cycle=50
+ping_flag=0
 
 #dht配置
 dht_cycle=200
@@ -60,9 +58,29 @@ dht11 = dht.DHT11(machine.Pin(4))
 temp_index=0
 
 #连接标志
-mqtt_connect_flag=0
-net_connect_flag=0
+mqtt_commect_status=statusoff
+net_commect_status=statusoff
 
+def mqtt_set_flag():
+    global ping_flag
+    global mqtt_commect_status
+    ping_flag=statusoff
+    mqtt_commect_status=statuson
+
+def mqtt_need_retry():
+    global ping_flag
+    global mqtt_commect_status
+    ping_flag=statusoff
+    mqtt_commect_status=statusoff
+
+def net_need_retry():
+    global net_commect_status
+    net_commect_status=statusoff
+    mqtt_need_retry()
+
+def net_set_flag():
+    global net_commect_status
+    net_commect_status=statuson
 
 def mqttping():
     global ping_index
@@ -70,19 +88,19 @@ def mqttping():
     ping_index = ping_index + 1
     if ping_index>ping_cycle:
         ping_index = 0
-        if ping_flag:
+        if ping_flag in statuson:
             print ("ping time out try reconnect!")
-            ping_flag=0
-            global mqtt_connect_flag
-            mqtt_connect_flag=1
-        try:
-            mqttClient.ping()
-            #print("ping mqtt server")
-            ping_flag=1
-        except OSError:
-            print("ping faild")
-            global mqtt_connect_flag
-            mqtt_connect_flag=1
+            ping_flag=statusoff
+            mqtt_need_retry()
+        else:
+            try:
+                mqttClient.ping()
+                #print("ping mqtt server")
+                ping_flag=statuson
+            except OSError:
+                print("ping faild")
+                mqtt_need_retry()
+                ping_flag=statusoff
 
 def temp_measure():
     global temp_index
@@ -102,34 +120,37 @@ def netinit():
     sta_if.active(True) 
     sta_if.scan()
 def netconnect(netid,netpwd):
+    global mqtt_retry_cnt
     if(True == sta_if.isconnected()):
         sta_if.disconnect()
     while(True != sta_if.isconnected()):
         print ("try netconnect")
         netinit()
         sta_if.connect(netid, netpwd)
-        for num in range(1,10):
-            time.sleep(1)
-            if(True == sta_if.isconnected()):
-                print ("netconnect ready")
-                global net_connect_flag
-                net_connect_flag=1
-                break
+        time.sleep(1)
+    net_set_flag()
+
 def on_mqtt_connect():
+    global mqtt_retry_cnt
+
     while(True == sta_if.isconnected()):
+        if (mqtt_retry_cnt>mqtt_retry_maxcnt):
+            net_need_retry()
+            return
         try:
             try:
+                mqtt_retry_cnt = mqtt_retry_cnt+1
                 print ("try mqtt_connect")
                 mqttClient.connect()
             except IndexError:
                 continue
-            global mqtt_connect_flag
-            mqtt_connect_flag=1
+            mqtt_set_flag()
             print ("mqtt_connect ready")
             break
         except OSError:
             print ("MQTT disconnect!")
             time.sleep(1)
+
     mqttClient.set_callback(on_message_come)
 
 def on_publish(topic, payload, qos):
@@ -137,8 +158,7 @@ def on_publish(topic, payload, qos):
         mqttClient.publish(topic, payload, qos=qos)
         #print("publish to " + topic + ": " + payload + " qos:" + str(qos))
     except OSError:
-        global mqtt_connect_flag
-        mqtt_connect_flag=0
+        mqtt_need_retry()
         print ("when on_publish MQTT disconnect!")
 
 def on_subscribe (topic, qos):
@@ -146,8 +166,7 @@ def on_subscribe (topic, qos):
         mqttClient.subscribe(topic,qos)
         #print("subscribe " + topic + "qos:" + str(qos))
     except OSError:
-        global mqtt_connect_flag
-        mqtt_connect_flag=0
+        mqtt_need_retry()
         print ("when sub topic MQTT disconnect!")
 
 def on_message_come(topic, msg):
@@ -165,10 +184,9 @@ def check_msg():
         result = mqttClient.check_msg()
         if result == 0x30:
             global ping_flag
-            ping_flag=0
+            ping_flag=statusoff
     except OSError:
-        global mqtt_connect_flag
-        mqtt_connect_flag=0
+        mqtt_need_retry()
         print ("when check_msg mqtt disconnect!")
 
 def subscribe_settopic():
@@ -180,14 +198,14 @@ def mqtt_connect():
     subscribe_settopic()
 
 def connect():
-    global mqtt_connect_flag
-    global net_connect_flag
-    if 0==net_connect_flag:
+    global mqtt_commect_status
+    global net_commect_status
+    if statusoff in net_commect_status:
         try:
             netconnect(NETID,NETPWD)
         except RuntimeError:
             print("netconnect faild")
-    if 0==mqtt_connect_flag:
+    if statusoff in mqtt_commect_status:
         try:
             mqtt_connect()
         except OSError:
@@ -213,8 +231,7 @@ def main():
             check_msg()
         else:
             print ("net disconnect!")
-            global net_connect_flag
-            net_connect_flag=0
+            net_need_retry()
         mqttping()
         statereply()
         temp_measure()
