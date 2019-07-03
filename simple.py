@@ -100,8 +100,11 @@ class MQTTClient:
         return resp[2] & 1
 
     def disconnect(self):
+        if self.sock == None:
+            return
         self.sock.write(b"\xe0\0")
         self.sock.close()
+        self.sock = None
 
     def ping(self):
         self.sock.write(b"\xc0\0")
@@ -174,7 +177,7 @@ class MQTTClient:
         if res == b"\xd0":  # PINGRESP
             sz = self.sock.read(1)[0]
             assert sz == 0
-            return 0x30
+            return res
         op = res[0]
         if op & 0xf0 != 0x30:
             return op

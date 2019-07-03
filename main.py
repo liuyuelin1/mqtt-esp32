@@ -18,7 +18,7 @@ D0=Pin(15,Pin.OUT)
 D1=Pin( 5,Pin.OUT)
 D2=Pin(10,Pin.OUT)
 D3=Pin( 0,Pin.OUT)
-D4=Pin( 2,Pin.OUT)
+D4=Pin( 4,Pin.OUT)
 D5=Pin(14,Pin.OUT)
 D6=Pin(12,Pin.OUT)
 D7=Pin(13,Pin.OUT)
@@ -46,10 +46,11 @@ MQTTPORT = 11883
 mqttClient = MQTTClient("switchserver0123", MQTTHOST, MQTTPORT, USER, PWD)
 mqtt_retry_cnt=0
 mqtt_retry_maxcnt=10
+ping_resp=b"\xd0"
 
 #ping参数
 ping_index=0
-ping_cycle=50
+ping_cycle=200
 ping_flag=0
 
 #dht配置
@@ -61,6 +62,19 @@ temp_index=0
 mqtt_commect_status=statusoff
 net_commect_status=statusoff
 
+#状态灯
+run_cyc=10
+run_index=0
+def runstatus():
+    global run_index
+    run_index = run_index +1
+    if run_index<run_cyc:
+        Pin(2, Pin.OUT, value=1)
+    elif run_index<(run_cyc*2):
+        Pin(2, Pin.OUT, value=0)
+    else:
+        run_index=0
+        
 #置位retry
 def mqtt_need_retry():
     global ping_flag
@@ -105,7 +119,7 @@ def mqttping():
         else:
             try:
                 mqttClient.ping()
-                #print("ping mqtt server")
+                print("ping mqtt server")
                 ping_flag=statuson
             except OSError:
                 print("when ping OSError")
@@ -140,11 +154,16 @@ def netconnect(netid,netpwd):
         netinit()
         sta_if.connect(netid, netpwd)
         time.sleep(1)
+    print ("netconnect ok")
+    time.sleep(3)
     net_set_flag()
 
 def mqtt_connect():
     global mqtt_retry_cnt
-
+    try:
+        mqttClient.disconnect()
+    except OSError:
+        pass
     while(True == sta_if.isconnected()):
         if (mqtt_retry_cnt>mqtt_retry_maxcnt):
             net_need_retry()
@@ -196,11 +215,13 @@ def message_come(topic, msg):
             command_topic[topic.decode("utf8")]["oldstate"]="ON"
 
 def check_msg():
+    global ping_resp
     try:
         result = mqttClient.check_msg()
-        if result == 0x30:
+        if result == ping_resp:
             global ping_flag
             ping_flag=statusoff
+            print("ping ack")
     except OSError:
         mqtt_need_retry()
         print ("when check_msg OSError!")
@@ -248,6 +269,7 @@ def main():
         mqttping()
         statereply()
         temp_measure()
+        runstatus()
         time.sleep(0.1)
         pass
 if __name__ == "__main__":
