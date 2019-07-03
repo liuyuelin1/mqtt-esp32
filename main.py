@@ -61,26 +61,36 @@ temp_index=0
 mqtt_commect_status=statusoff
 net_commect_status=statusoff
 
+#置位retry
+def mqtt_need_retry():
+    global ping_flag
+    global mqtt_commect_status
+    ping_flag=statusoff
+    mqtt_commect_status=statusoff
+def net_need_retry():
+    global net_commect_status
+    net_commect_status=statusoff
+    mqtt_need_retry()
+
+#置位OK
+def net_set_flag():
+    global net_commect_status
+    net_commect_status=statuson
 def mqtt_set_flag():
     global ping_flag
     global mqtt_commect_status
     ping_flag=statusoff
     mqtt_commect_status=statuson
 
-def mqtt_need_retry():
-    global ping_flag
+#check状态
+def net_mqtt_state_check():
+    global net_commect_status
     global mqtt_commect_status
-    ping_flag=statusoff
-    mqtt_commect_status=statusoff
-
-def net_need_retry():
-    global net_commect_status
-    net_commect_status=statusoff
-    mqtt_need_retry()
-
-def net_set_flag():
-    global net_commect_status
-    net_commect_status=statuson
+    if statusoff in net_commect_status:
+        return statusoff
+    if statusoff in mqtt_commect_status:
+        return statusoff
+    return statuson
 
 def mqttping():
     global ping_index
@@ -98,7 +108,7 @@ def mqttping():
                 #print("ping mqtt server")
                 ping_flag=statuson
             except OSError:
-                print("ping faild")
+                print("when ping OSError")
                 mqtt_need_retry()
                 ping_flag=statusoff
 
@@ -111,10 +121,11 @@ def temp_measure():
             dht11.measure()
             print ("the temperature is: " + str(dht11.temperature())) # eg. 23 (°C)
             print ("the humidity is: " + str(dht11.humidity()))    # eg. 41 (% RH)
-            on_publish("home/bedroom/sensor0/state", str(dht11.temperature()), 0)
-            on_publish("home/bedroom/sensor1/state", str(dht11.humidity()), 0)
         except OSError:
-            print ("DHT11 is not ready!")
+            print ("when measure OSError!")
+        else:
+            publish("home/bedroom/sensor0/state", str(dht11.temperature()), 0)
+            publish("home/bedroom/sensor1/state", str(dht11.humidity()), 0)
 
 def netinit():
     sta_if.active(True) 
@@ -123,6 +134,7 @@ def netconnect(netid,netpwd):
     global mqtt_retry_cnt
     if(True == sta_if.isconnected()):
         sta_if.disconnect()
+        time.sleep(1)
     while(True != sta_if.isconnected()):
         print ("try netconnect")
         netinit()
@@ -130,46 +142,50 @@ def netconnect(netid,netpwd):
         time.sleep(1)
     net_set_flag()
 
-def on_mqtt_connect():
+def mqtt_connect():
     global mqtt_retry_cnt
 
     while(True == sta_if.isconnected()):
         if (mqtt_retry_cnt>mqtt_retry_maxcnt):
             net_need_retry()
+            mqtt_retry_cnt=0
             return
+        mqtt_retry_cnt = mqtt_retry_cnt+1
         try:
-            try:
-                mqtt_retry_cnt = mqtt_retry_cnt+1
-                print ("try mqtt_connect")
-                mqttClient.connect()
-            except IndexError:
-                continue
+            print ("try mqtt_connect")
+            mqttClient.connect()
+        except OSError:
+            print ("mqtt_connect OSError!")
+            time.sleep(0.5)
+            continue
+        except IndexError:
+            print ("mqtt_connect IndexError!")
+            time.sleep(0.5)
+            continue
+        else:
             mqtt_set_flag()
             print ("mqtt_connect ready")
+            mqttClient.set_callback(message_come)
+            subscribe_settopic()
             break
-        except OSError:
-            print ("MQTT disconnect!")
-            time.sleep(1)
 
-    mqttClient.set_callback(on_message_come)
-
-def on_publish(topic, payload, qos):
+def publish(topic, payload, qos):
     try:
         mqttClient.publish(topic, payload, qos=qos)
         #print("publish to " + topic + ": " + payload + " qos:" + str(qos))
     except OSError:
         mqtt_need_retry()
-        print ("when on_publish MQTT disconnect!")
+        print ("when publish OSError!")
 
-def on_subscribe (topic, qos):
+def subscribe (topic, qos):
     try:
         mqttClient.subscribe(topic,qos)
         #print("subscribe " + topic + "qos:" + str(qos))
     except OSError:
         mqtt_need_retry()
-        print ("when sub topic MQTT disconnect!")
+        print ("when subscribe OSError!")
 
-def on_message_come(topic, msg):
+def message_come(topic, msg):
     print(topic.decode("utf8"),msg.decode("utf8"))
     if topic.decode("utf8") in command_topic.keys():
         if "ON" in msg.decode("utf8"):
@@ -187,15 +203,11 @@ def check_msg():
             ping_flag=statusoff
     except OSError:
         mqtt_need_retry()
-        print ("when check_msg mqtt disconnect!")
+        print ("when check_msg OSError!")
 
 def subscribe_settopic():
     for key in command_topic.keys():
-        on_subscribe(key,0)
-
-def mqtt_connect():
-    on_mqtt_connect()
-    subscribe_settopic()
+        subscribe(key,0)
 
 def connect():
     global mqtt_commect_status
@@ -204,17 +216,17 @@ def connect():
         try:
             netconnect(NETID,NETPWD)
         except RuntimeError:
-            print("netconnect faild")
+            print("when netconnect RuntimeError")
     if statusoff in mqtt_commect_status:
-        try:
-            mqtt_connect()
-        except OSError:
-            print("mqtt_connect faild")
+        mqtt_connect()
+
 
 def statereply():
+    if statusoff in mqtt_commect_status:
+        return
     for key in command_topic.keys():
         if command_topic[key]["newstate"] not in command_topic[key]["oldstate"]:
-            on_publish(command_topic[key]["state_topic"], command_topic[key]["newstate"], 1)
+            publish(command_topic[key]["state_topic"], command_topic[key]["newstate"], 1)
             if "ON" in command_topic[key]["newstate"]:
                 command_topic[key]["switch"].on()
             else:
@@ -224,9 +236,10 @@ def statereply():
 
 def main(): 
     print(VERSION)
-    #_thread.start_new_thread(sem_thread, ())
     while True:
         connect()
+        if statusoff in net_mqtt_state_check():
+            continue
         if (True == sta_if.isconnected()):
             check_msg()
         else:
