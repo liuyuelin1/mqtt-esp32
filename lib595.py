@@ -8,16 +8,16 @@ class ShiftRegister:
     latch_pin => pin 12 on the 74HC595
     clock_pin => pin 11 on the 74HC595
     """
-    def __init__(self, data_pin, latch_pin, clock_pin):
+    def __init__(self, data_pin, latch_pin, clock_pin, series_num=1):
         self.data_pin = data_pin
         self.latch_pin = latch_pin
         self.clock_pin = clock_pin
-
+        self.series_num = series_num
         Pin(self.data_pin, Pin.OUT)
         Pin(self.latch_pin, Pin.OUT)
         Pin(self.clock_pin, Pin.OUT)
 
-        self.outputs = [0] * 8
+        self.outputs = [0] * (self.series_num*8)
 
     """
     output_number => Value from 0 to 7 pointing to the output pin on the 74HC595
@@ -45,7 +45,7 @@ class ShiftRegister:
 
     def latch(self):
         Pin(self.latch_pin,Pin.OUT, 0)
-        for i in range(7, -1, -1):
+        for i in range((self.series_num*8-1), -1, -1):
             Pin(self.clock_pin, 0)
             Pin(self.data_pin,Pin.OUT, self.outputs[i])
             Pin(self.clock_pin,Pin.OUT, 1)

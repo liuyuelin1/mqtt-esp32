@@ -40,7 +40,7 @@ command_topic={
 }
 
 #595配置
-hc595 = ShiftRegister(17,18,19)
+hc595 = ShiftRegister(17,18,19,1)
 
 #mqtt配置
 USER = "xensyz"
