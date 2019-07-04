@@ -4,9 +4,10 @@ from simple import MQTTClient
 from machine import Pin
 import network 
 import time
+from lib595 import ShiftRegister
 
 #配置版本号
-VERSION = "V0.0.5"
+VERSION = "V0.0.6"
 
 #wifi配置
 NETID = "smarthome"
@@ -28,15 +29,18 @@ statuson = "ON"
 statusoff = "OFF"
 statusunkown = "UNKOWN"
 command_topic={
-"home/bedroom/switch0/set":{"state_topic":"home/bedroom/switch0/state","newstate":statusoff,"oldstate":statusunkown,"switch":D0},
-"home/bedroom/switch1/set":{"state_topic":"home/bedroom/switch1/state","newstate":statusoff,"oldstate":statusunkown,"switch":D1},
-"home/bedroom/switch2/set":{"state_topic":"home/bedroom/switch2/state","newstate":statusoff,"oldstate":statusunkown,"switch":D2},
-"home/bedroom/switch3/set":{"state_topic":"home/bedroom/switch3/state","newstate":statusoff,"oldstate":statusunkown,"switch":D3},
-"home/bedroom/switch4/set":{"state_topic":"home/bedroom/switch4/state","newstate":statusoff,"oldstate":statusunkown,"switch":D4},
-"home/bedroom/switch5/set":{"state_topic":"home/bedroom/switch5/state","newstate":statusoff,"oldstate":statusunkown,"switch":D5},
-"home/bedroom/switch6/set":{"state_topic":"home/bedroom/switch6/state","newstate":statusoff,"oldstate":statusunkown,"switch":D6},
-"home/bedroom/switch7/set":{"state_topic":"home/bedroom/switch7/state","newstate":statusoff,"oldstate":statusunkown,"switch":D7}
+"home/bedroom/switch0/set":{"state_topic":"home/bedroom/switch0/state","newstate":statusoff,"oldstate":statusunkown,"switch":D0,"index":0},
+"home/bedroom/switch1/set":{"state_topic":"home/bedroom/switch1/state","newstate":statusoff,"oldstate":statusunkown,"switch":D1,"index":1},
+"home/bedroom/switch2/set":{"state_topic":"home/bedroom/switch2/state","newstate":statusoff,"oldstate":statusunkown,"switch":D2,"index":2},
+"home/bedroom/switch3/set":{"state_topic":"home/bedroom/switch3/state","newstate":statusoff,"oldstate":statusunkown,"switch":D3,"index":3},
+"home/bedroom/switch4/set":{"state_topic":"home/bedroom/switch4/state","newstate":statusoff,"oldstate":statusunkown,"switch":D4,"index":4},
+"home/bedroom/switch5/set":{"state_topic":"home/bedroom/switch5/state","newstate":statusoff,"oldstate":statusunkown,"switch":D5,"index":5},
+"home/bedroom/switch6/set":{"state_topic":"home/bedroom/switch6/state","newstate":statusoff,"oldstate":statusunkown,"switch":D6,"index":6},
+"home/bedroom/switch7/set":{"state_topic":"home/bedroom/switch7/state","newstate":statusoff,"oldstate":statusunkown,"switch":D7,"index":7}
 }
+
+#595配置
+hc595 = ShiftRegister(17,18,19)
 
 #mqtt配置
 USER = "xensyz"
@@ -243,17 +247,21 @@ def connect():
 
 
 def statereply():
+    refresh595=0
     if statusoff in mqtt_commect_status:
         return
     for key in command_topic.keys():
         if command_topic[key]["newstate"] not in command_topic[key]["oldstate"]:
+            refresh595=1
             publish(command_topic[key]["state_topic"], command_topic[key]["newstate"], 1)
             if "ON" in command_topic[key]["newstate"]:
-                command_topic[key]["switch"].on()
+                hc595.setOutput(command_topic[key]["index"],1)
             else:
-                command_topic[key]["switch"].off()
+                hc595.setOutput(command_topic[key]["index"],0)
             command_topic[key]["oldstate"]=command_topic[key]["newstate"]
             time.sleep(0.1)
+    if refresh595:
+        hc595.latch()
 
 def main(): 
     print(VERSION)

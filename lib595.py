@@ -49,5 +49,5 @@ class ShiftRegister:
             Pin(self.clock_pin, 0)
             Pin(self.data_pin,Pin.OUT, self.outputs[i])
             Pin(self.clock_pin,Pin.OUT, 1)
-
         Pin(self.latch_pin,Pin.OUT, 1)
+        print(self.outputs)
