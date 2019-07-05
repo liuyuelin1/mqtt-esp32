@@ -1,6 +1,6 @@
 from machine import Pin
 
-class ShiftRegister:
+class HC595Driver:
     register_type = '74HC595'
 
     """
@@ -13,9 +13,9 @@ class ShiftRegister:
         self.latch_pin = latch_pin
         self.clock_pin = clock_pin
         self.series_num = series_num
-        Pin(self.data_pin, Pin.OUT)
-        Pin(self.latch_pin, Pin.OUT)
-        Pin(self.clock_pin, Pin.OUT)
+        self.DataPin  = Pin(self.data_pin , Pin.IN)
+        self.LatchPin = Pin(self.latch_pin, Pin.OUT)
+        self.ClkPin   = Pin(self.clock_pin, Pin.OUT)
 
         self.outputs = [0] * (self.series_num*8)
 
@@ -38,16 +38,16 @@ class ShiftRegister:
             raise ValueError("Invalid output number. Can be only an int from 0 to 7")
 
     def setOutputs(self, outputs):
-        if 8 != len(outputs):
-            raise ValueError("setOutputs must be an array with 8 elements")
+        if self.series_num*8 != len(outputs):
+            raise ValueError("setOutputs must be an array with %d elements" %(self.series_num*8-1))
 
         self.outputs = outputs
 
     def latch(self):
-        Pin(self.latch_pin,Pin.OUT, 0)
+        self.LatchPin.off()
         for i in range((self.series_num*8-1), -1, -1):
-            Pin(self.clock_pin, 0)
+            self.ClkPin.off()
             Pin(self.data_pin,Pin.OUT, self.outputs[i])
-            Pin(self.clock_pin,Pin.OUT, 1)
-        Pin(self.latch_pin,Pin.OUT, 1)
+            self.ClkPin.on()
+        self.LatchPin.on()
         print(self.outputs)

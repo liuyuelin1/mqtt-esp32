@@ -4,8 +4,8 @@ from simple import MQTTClient
 from machine import Pin
 import network 
 import time
-from lib595 import ShiftRegister
-
+from lib595 import HC595Driver
+from lib165 import HC165Driver
 #配置版本号
 VERSION = "V0.0.6"
 
@@ -40,8 +40,28 @@ command_topic={
 }
 
 #595配置
-hc595 = ShiftRegister(17,18,19,1)
+hc595 = HC595Driver(17,18,19,1)
 
+#165配置
+hc165 = HC165Driver(25,26,27,1)
+hc165_index=0
+hc165_cycle=100
+def input_refresh():
+    global hc165_index
+    global hc165_cycle
+    hc165_index = hc165_index + 1
+    if hc165_index>hc165_cycle:
+        hc165_index = 0
+        hc165.latch()
+        inputs=hc165.getInputs()
+        for key in command_topic.keys():
+            try:
+                if inputs[command_topic[key]["index"]] ==1:
+                    command_topic[key]["newstate"]="ON"
+                else:
+                    command_topic[key]["newstate"]="OFF"
+            except IndexError:
+                print("inputs indexerror")
 #mqtt配置
 USER = "xensyz"
 PWD = "TEST"
@@ -278,6 +298,7 @@ def main():
         statereply()
         temp_measure()
         runstatus()
+        input_refresh()
         time.sleep(0.1)
         pass
 if __name__ == "__main__":
