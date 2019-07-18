@@ -47,7 +47,7 @@ class HC595Driver:
         self.LatchPin.off()
         for i in range((self.series_num*8-1), -1, -1):
             self.ClkPin.off()
-            Pin(self.data_pin,Pin.OUT, self.outputs[i])
+            Pin(self.data_pin,Pin.OUT, value=self.outputs[i])
             self.ClkPin.on()
         self.LatchPin.on()
         print(self.outputs)

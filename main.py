@@ -7,12 +7,7 @@ import time
 from lib595 import HC595Driver
 from lib165 import HC165Driver
 #配置版本号
-VERSION = "V0.0.6"
-
-#wifi配置
-NETID = "smarthome"
-NETPWD = "guojing123,./"
-sta_if = network.WLAN(network.STA_IF)
+VERSION = "V0.1.0"
 
 #输出gpio配置
 D0=Pin(15,Pin.OUT)
@@ -39,66 +34,10 @@ command_topic={
 "home/bedroom/switch7/set":{"state_topic":"home/bedroom/switch7/state","newstate":statusoff,"oldstate":statusunkown,"switch":D7,"index":7}
 }
 
-#595配置
-hc595 = HC595Driver(17,18,19,1)
-
-#165配置
-hc165 = HC165Driver(25,26,27,1)
-hc165_index=0
-hc165_cycle=100
-def input_refresh():
-    global hc165_index
-    global hc165_cycle
-    hc165_index = hc165_index + 1
-    if hc165_index>hc165_cycle:
-        hc165_index = 0
-        hc165.latch()
-        inputs=hc165.getInputs()
-        for key in command_topic.keys():
-            try:
-                if inputs[command_topic[key]["index"]] ==1:
-                    command_topic[key]["newstate"]="ON"
-                else:
-                    command_topic[key]["newstate"]="OFF"
-            except IndexError:
-                print("inputs indexerror")
-#mqtt配置
-USER = "xensyz"
-PWD = "TEST"
-MQTTHOST = "www.eniac.shop"
-MQTTPORT = 11883
-mqttClient = MQTTClient("switchserver0123", MQTTHOST, MQTTPORT, USER, PWD)
-mqtt_retry_cnt=0
-mqtt_retry_maxcnt=10
-ping_resp=b"\xd0"
-
-#ping参数
-ping_index=0
-ping_cycle=200
-ping_flag=0
-
-#dht配置
-dht_cycle=200
-dht11 = dht.DHT11(machine.Pin(4))
-temp_index=0
-
 #连接标志
 mqtt_commect_status=statusoff
 net_commect_status=statusoff
 
-#状态灯
-run_cyc=10
-run_index=0
-def runstatus():
-    global run_index
-    run_index = run_index +1
-    if run_index<run_cyc:
-        Pin(2, Pin.OUT, value=1)
-    elif run_index<(run_cyc*2):
-        Pin(2, Pin.OUT, value=0)
-    else:
-        run_index=0
-        
 #置位retry
 def mqtt_need_retry():
     global ping_flag
@@ -130,44 +69,11 @@ def net_mqtt_state_check():
         return statusoff
     return statuson
 
-def mqttping():
-    global ping_index
-    global ping_flag
-    ping_index = ping_index + 1
-    if ping_index>ping_cycle:
-        ping_index = 0
-        if ping_flag in statuson:
-            print ("ping time out try reconnect!")
-            ping_flag=statusoff
-            mqtt_need_retry()
-        else:
-            try:
-                mqttClient.ping()
-                print("ping mqtt server")
-                ping_flag=statuson
-            except OSError:
-                print("when ping OSError")
-                mqtt_need_retry()
-                ping_flag=statusoff
-
-def temp_measure():
-    global temp_index
-    temp_index = temp_index + 1
-    if temp_index>dht_cycle:
-        temp_index = 0
-        try:
-            dht11.measure()
-            print ("the temperature is: " + str(dht11.temperature())) # eg. 23 (°C)
-            print ("the humidity is: " + str(dht11.humidity()))    # eg. 41 (% RH)
-        except OSError:
-            print ("when measure OSError!")
-        else:
-            publish("home/bedroom/sensor0/state", str(dht11.temperature()), 0)
-            publish("home/bedroom/sensor1/state", str(dht11.humidity()), 0)
-
-def netinit():
-    sta_if.active(True) 
-    sta_if.scan()
+#wifi配置
+NETID = "smarthome"
+NETPWD = "guojing123,./"
+sta_if = network.WLAN(network.STA_IF)
+#net连接
 def netconnect(netid,netpwd):
     global mqtt_retry_cnt
     if(True == sta_if.isconnected()):
@@ -175,13 +81,24 @@ def netconnect(netid,netpwd):
         time.sleep(1)
     while(True != sta_if.isconnected()):
         print ("try netconnect")
-        netinit()
+        sta_if.active(True) 
+        sta_if.scan()
         sta_if.connect(netid, netpwd)
         time.sleep(1)
     print ("netconnect ok")
     time.sleep(3)
     net_set_flag()
 
+#mqtt配置
+USER = "xensyz"
+PWD = "TEST"
+MQTTHOST = "www.eniac.shop"
+MQTTPORT = 11883
+mqttClient = MQTTClient("switchserver0123", MQTTHOST, MQTTPORT, USER, PWD)
+mqtt_retry_cnt=0
+mqtt_retry_maxcnt=10
+ping_resp=b"\xd0"
+#mqtt连接
 def mqtt_connect():
     global mqtt_retry_cnt
     try:
@@ -211,7 +128,6 @@ def mqtt_connect():
             mqttClient.set_callback(message_come)
             subscribe_settopic()
             break
-
 def publish(topic, payload, qos):
     try:
         mqttClient.publish(topic, payload, qos=qos)
@@ -219,7 +135,6 @@ def publish(topic, payload, qos):
     except OSError:
         mqtt_need_retry()
         print ("when publish OSError!")
-
 def subscribe (topic, qos):
     try:
         mqttClient.subscribe(topic,qos)
@@ -227,7 +142,7 @@ def subscribe (topic, qos):
     except OSError:
         mqtt_need_retry()
         print ("when subscribe OSError!")
-
+#回调函数
 def message_come(topic, msg):
     print(topic.decode("utf8"),msg.decode("utf8"))
     if topic.decode("utf8") in command_topic.keys():
@@ -237,7 +152,7 @@ def message_come(topic, msg):
         elif "OFF" in msg.decode("utf8"):
             command_topic[topic.decode("utf8")]["newstate"]="OFF"
             command_topic[topic.decode("utf8")]["oldstate"]="ON"
-
+#轮询订阅
 def check_msg():
     global ping_resp
     try:
@@ -249,11 +164,12 @@ def check_msg():
     except OSError:
         mqtt_need_retry()
         print ("when check_msg OSError!")
-
+#订阅相关主题
 def subscribe_settopic():
     for key in command_topic.keys():
         subscribe(key,0)
 
+#wifi/mqtt连接
 def connect():
     global mqtt_commect_status
     global net_commect_status
@@ -266,6 +182,34 @@ def connect():
         mqtt_connect()
 
 
+#ping参数
+ping_index=0
+ping_cycle=200
+ping_flag=0
+#mqtt ping发送 20S
+def mqttping():
+    global ping_index
+    global ping_flag
+    ping_index = ping_index + 1
+    if ping_index>ping_cycle:
+        ping_index = 0
+        if ping_flag in statuson:
+            print ("ping time out try reconnect!")
+            ping_flag=statusoff
+            mqtt_need_retry()
+        else:
+            try:
+                mqttClient.ping()
+                print("ping mqtt server")
+                ping_flag=statuson
+            except OSError:
+                print("when ping OSError")
+                mqtt_need_retry()
+                ping_flag=statusoff
+
+#595配置
+hc595 = HC595Driver(17,18,19,1)
+#输出开关刷新
 def statereply():
     refresh595=0
     if statusoff in mqtt_commect_status:
@@ -283,8 +227,74 @@ def statereply():
     if refresh595:
         hc595.latch()
 
+#dht配置
+dht_cycle=200
+dht11 = dht.DHT11(machine.Pin(4))
+temp_index=0
+#DHT更新
+def temp_measure():
+    global temp_index
+    temp_index = temp_index + 1
+    if temp_index>dht_cycle:
+        temp_index = 0
+        try:
+            dht11.measure()
+            print ("the temperature is: " + str(dht11.temperature())) # eg. 23 (°C)
+            print ("the humidity is: " + str(dht11.humidity()))    # eg. 41 (% RH)
+        except OSError:
+            print ("when measure OSError!")
+        else:
+            publish("home/bedroom/sensor0/state", str(dht11.temperature()), 0)
+            publish("home/bedroom/sensor1/state", str(dht11.humidity()), 0)
+
+#状态灯
+run_cyc=10
+run_index=0
+#运行状态灯，0.5HZ闪烁
+def runstatus():
+    global run_index
+    run_index = run_index +1
+    if run_index<run_cyc:
+        Pin(2, Pin.OUT, value=1)
+    elif run_index<(run_cyc*2):
+        Pin(2, Pin.OUT, value=0)
+    else:
+        run_index=0
+
+#165配置
+hc165 = HC165Driver(25,26,27,1)
+hc165_index=0
+hc165_cycle=100
+hc165_inputs=[0]*8
+#输入开关原始状态更新
+def input_original_refresh():
+    global hc165_inputs
+    hc165.latch()
+    hc165_inputs=hc165.getInputs()
+#输入开关状态更新
+def input_refresh():
+    global hc165_inputs
+    global hc165_index
+    global hc165_cycle
+    hc165_index = hc165_index + 1
+    if hc165_index>hc165_cycle:
+        hc165_index = 0
+        hc165.latch()
+        inputs=hc165.getInputs()
+        for key in command_topic.keys():
+            try:
+                if hc165_inputs[command_topic[key]["index"]] !=inputs[command_topic[key]["index"]]:
+                    if "ON" in command_topic[key]["newstate"]:
+                        command_topic[key]["newstate"]="OFF"
+                    else:
+                        command_topic[key]["newstate"]="ON"
+                    hc165_inputs[command_topic[key]["index"]] =inputs[command_topic[key]["index"]]
+            except IndexError:
+                print("inputs indexerror")
+
 def main(): 
     print(VERSION)
+    input_original_refresh()
     while True:
         connect()
         if statusoff in net_mqtt_state_check():
@@ -301,5 +311,6 @@ def main():
         input_refresh()
         time.sleep(0.1)
         pass
+
 if __name__ == "__main__":
     main()
