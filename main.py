@@ -3,7 +3,7 @@ import machine
 from simple import MQTTClient
 from machine import Pin
 import network 
-import time
+import utime
 from lib595 import HC595Driver
 from lib165 import HC165Driver
 #配置版本号
@@ -78,15 +78,15 @@ def netconnect(netid,netpwd):
     global mqtt_retry_cnt
     if(True == sta_if.isconnected()):
         sta_if.disconnect()
-        time.sleep(1)
+        utime.sleep(1)
     while(True != sta_if.isconnected()):
         print ("try netconnect")
         sta_if.active(True) 
         sta_if.scan()
         sta_if.connect(netid, netpwd)
-        time.sleep(1)
+        utime.sleep(1)
     print ("netconnect ok")
-    time.sleep(3)
+    utime.sleep(3)
     net_set_flag()
 
 #mqtt配置
@@ -116,11 +116,11 @@ def mqtt_connect():
             mqttClient.connect()
         except OSError:
             print ("mqtt_connect OSError!")
-            time.sleep(0.5)
+            utime.sleep(0.5)
             continue
         except IndexError:
             print ("mqtt_connect IndexError!")
-            time.sleep(0.5)
+            utime.sleep(0.5)
             continue
         else:
             mqtt_set_flag()
@@ -223,7 +223,7 @@ def statereply():
             else:
                 hc595.setOutput(command_topic[key]["index"],0)
             command_topic[key]["oldstate"]=command_topic[key]["newstate"]
-            time.sleep(0.1)
+            utime.sleep(0.1)
     if refresh595:
         hc595.latch()
 
@@ -260,7 +260,9 @@ def runstatus():
         Pin(2, Pin.OUT, value=0)
     else:
         run_index=0
-
+        ytime=utime.ticks_us()
+        utime.sleep_ms(1000)
+        print(utime.ticks_diff(utime.ticks_us(),ytime))
 #165配置
 hc165 = HC165Driver(25,26,27,1)
 hc165_index=0
@@ -309,7 +311,7 @@ def main():
         temp_measure()
         runstatus()
         input_refresh()
-        time.sleep(0.1)
+        utime.sleep(0.1)
         pass
 
 if __name__ == "__main__":
