@@ -18,20 +18,34 @@ def main():
     #timinit()
     text=0x18
     tmp=10
+    color=0xf0
+    tmpc=1
     while True:
         cam.communicate()
         utime.sleep_ms(100)
         if 1 == cam.moduleTypeInfo(0):
             print(text)
             print(cam.getInputByte(0))
+            #cam.setServoColor(0,color)
             cam.setServoPosition(0,text)
+            
         text=text+tmp
         if  text<0x18:
             text=0x18
-            tmp=10
-        elif text>0xe8:
-            text=0xe8
-            tmp=-10
+            tmp=1
+        elif text>0xe4:
+            text=0xe4
+            tmp=-1
+            
+        color=color+tmpc
+        if  color<0xf0:
+            color=0xf0
+            tmpc=1
+            cam.setServoColor(0,color)
+        elif color>0xf7:
+            color=0xf7
+            tmpc=-1
+            
         pass
 
 if __name__ == "__main__":
