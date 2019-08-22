@@ -15,6 +15,7 @@ def timinit():
 def main():
     global cam
     cam=CAMDriver(25)
+    
     #timinit()
     text=0x18
     tmp=10
@@ -27,7 +28,13 @@ def main():
             print(text)
             print(cam.getInputByte(0))
             #cam.setServoColor(0,color)
+            #cam.setServoColor(1,color)
+            #cam.setServoColor(2,color)
+            #cam.setServoColor(3,color)
             cam.setServoPosition(0,text)
+            cam.setServoPosition(1,text)
+            cam.setServoPosition(2,text)
+            cam.setServoPosition(3,text)
             
         text=text+tmp
         if  text<0x18:

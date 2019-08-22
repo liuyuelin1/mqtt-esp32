@@ -86,7 +86,7 @@ class CAMDriver:
                 color=self.color_white
             self.setOutputByte(num,color)
         else:
-            print ("when setServotoLIM no servos!please check!")
+            print ("when setServoColor no servos!please check!")
     #设置num设备学习模式
     def setServotoLIM(self,num):
         if self.moduleType[num] == self.type_servo:
