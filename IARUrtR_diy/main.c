@@ -7,6 +7,7 @@ main()
     GpioInit();
     ReadData();
     StatusInit();
+    WDogInit();
     asm("rim");//打开全局中断
     while (1){
         CheckUARTCmd();

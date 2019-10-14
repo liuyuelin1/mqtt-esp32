@@ -45,18 +45,28 @@ void Init_Timer4(void)
 
 void InitUART1(void)
 {
-      UART1_CR1 = 0x00;
-      UART1_CR2 = 0x00;
-      UART1_CR3 = 0x00;
-      UART1_BRR2= 0x00;
-      UART1_BRR1= 0x0d;
-      UART1_CR2 = 0x2c;
+    UART1_CR1 = 0x00;
+    UART1_CR2 = 0x00;
+    UART1_CR3 = 0x00;
+    UART1_BRR2= 0x00;
+    UART1_BRR1= 0x0d;
+    UART1_CR2 = 0x2c;
 }
 void UART1SendChar(unsigned char c)
 {
-      while((UART1_SR & 0x80)==0x00);
-      UART1_DR=c;
+    while((UART1_SR & 0x80)==0x00);
+    UART1_DR=c;
 }
+
+void WDogInit(void)
+{
+    IWDG_KR = 0xcc; //启用看门狗
+    IWDG_KR = 0x55; //解锁寄存器//1024ms
+    IWDG_PR = 0x06; //分频值
+    IWDG_RLR= 0xfe;//重装载值
+    IWDG_KR = 0xaa; //数据刷新
+}
+
 
 //debug输出日志
 void output(char * c){
@@ -89,8 +99,9 @@ __interrupt void TIM4_OVR_UIF_IRQHandler(void)
     TIM4_SR &=~(0x01);
     i++;
 
-    if(125<=i){
+    if(100<=i){//约8ms*100
         i=0;
+        IWDG_KR=0xaa;
         if(PD_IDR_IDR4){
             PD_ODR_ODR4=0;
         }
