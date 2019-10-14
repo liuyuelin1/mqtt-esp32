@@ -30,7 +30,6 @@ def lcd_print(str,x=0,cnt=128,line=0):
     lcd.text(str,x,line*8)
     lcd.show()
 
-
 #配置版本号
 VERSION = "V0.1.1"
 
@@ -67,28 +66,22 @@ def connectflag(cmd):
         net_commect_status=False
         mqtt_commect_status=False
         lcd_print("WIFI OFF",cnt=64,line=0)
-
     elif "mqttoff" in cmd:
         ping_flag=False
         mqtt_commect_status=False
         lcd_print("MQTT OFF",x=64,cnt=64,line=0)
-        
     elif "neton" in cmd:
         net_commect_status=True
         lcd_print("WIFI ON",cnt=64,line=0)
-
     elif "mqtton" in cmd:
         ping_flag=False
         mqtt_commect_status=True
         lcd_print("MQTT ON",x=64,cnt=64,line=0)
-
     elif "getflag" in cmd:
         if net_commect_status and mqtt_commect_status:
             return True
         else:
             return False
-
-
 #wifi配置
 NETID = "smarthome"
 NETPWD = "guojing123,./"
@@ -114,10 +107,12 @@ USER = "xensyz"
 PWD = "TEST"
 MQTTHOST = "www.eniac.shop"
 MQTTPORT = 11883
-mqttClient = MQTTClient("switchserver0123", MQTTHOST, MQTTPORT, USER, PWD)
 mqtt_retry_cnt=0
 mqtt_retry_maxcnt=10
 ping_resp=b"\xd0"
+mqttClient = MQTTClient("switchserver0123", MQTTHOST, MQTTPORT, USER, PWD)
+#dht配置
+dht11 = dht.DHT11(Pin(25))
 #mqtt连接
 def mqtt_connect():
     global mqtt_retry_cnt
@@ -233,27 +228,31 @@ def mqttping():
 def statereply():
     if not mqtt_commect_status:
         return
+    status_0_3=""
+    status_4_7=""
     for key in command_topic.keys():
         if command_topic[key]["newstate"] not in command_topic[key]["oldstate"]:
             publish(command_topic[key]["state_topic"], command_topic[key]["newstate"], 1)
             command_topic[key]["oldstate"]=command_topic[key]["newstate"]
-            #utime.sleep(0.005)
-
-#dht配置
-dht_cycle=50
-dht11 = dht.DHT11(Pin(25))
-temp_index=0
-
+        if "ON" in command_topic[key]["newstate"]:
+            if command_topic[key]["index"]//4:
+                lcd_print(str(command_topic[key]["index"])+":Y ",x=(command_topic[key]["index"]%4)*4*8,cnt=32,line=5)
+            else:
+                lcd_print(str(command_topic[key]["index"])+":Y ",x=(command_topic[key]["index"]%4)*4*8,cnt=32,line=4)
+        elif "OFF" in command_topic[key]["newstate"]:
+            if command_topic[key]["index"]//4:
+                lcd_print(str(command_topic[key]["index"])+":N ",x=(command_topic[key]["index"]%4)*4*8,cnt=32,line=5)
+            else:
+                lcd_print(str(command_topic[key]["index"])+":N ",x=(command_topic[key]["index"]%4)*4*8,cnt=32,line=4)
 
 def display_init():
     connect()
     temp_measure()
     get_time()
     time_init(1000)
-    lcd_print((str(H//10)+str(H%10)+":"+str(M//10)+str(M%10)+":"+str(S//10)+str(S%10)),line=4)
-    lcd_print ("TEMP: " + str(TEMP)+"C",line=1) # eg. 23 (°C)
-    lcd_print ("HUM : " + str(HUM )+"%",line=2)    # eg. 41 (% RH)
-    lcd_print(DATE,line=5)
+    lcd_print((str(H//10)+str(H%10)+":"+str(M//10)+str(M%10)+":"+str(S//10)+str(S%10)+"   "+DATE),line=2)
+    lcd_print ("TEMP:" + str(TEMP)+"C"+" HUM:" + str(HUM )+"%",line=1)
+    lcd_print(DATE,line=3)
 
 #DHT更新
 def temp_measure():
@@ -276,20 +275,19 @@ S=0
 TEMP=0
 HUM=0
 
-DATE="2019-01-01"
+DATE="01-01"
 def get_time():
     global H
     global M
     global S
     global DATE
-
     URL="http://quan.suning.com/getSysTime.do"
     try:
         res = urequests.get(URL).text
         H=int(res[24:26])
         M=int(res[27:29])
         S=int(res[30:32])
-        DATE=res[13:23]
+        DATE=res[18:23]
     except IndexError:
         print("gettime IndexError")
     except OSError:
@@ -309,13 +307,11 @@ def timing(tim):
         M=0
     if H>=24:
         H=0
-    lcd_print((str(H//10)+str(H%10)+":"+str(M//10)+str(M%10)+":"+str(S//10)+str(S%10)),line=4)
+    lcd_print((str(H//10)+str(H%10)+":"+str(M//10)+str(M%10)+":"+str(S//10)+str(S%10)+"   "+DATE),line=2)
     if S==30:
         temp_measure()
         get_time()
-        lcd_print ("TEMP: " + str(TEMP)+"C",line=1) # eg. 23 (°C)
-        lcd_print ("HUM : " + str(HUM )+"%",line=2)    # eg. 41 (% RH)
-        lcd_print(DATE,line=5)
+        lcd_print ("TEMP:" + str(TEMP)+"C"+" HUM:" + str(HUM )+"%",line=1)
         mqttping()
 tm=None
 def time_init(ms):

@@ -3,14 +3,14 @@ import time
 class CurtainDriver:
     register_type = 'Curtain'
 
-    def __init__(self, leftwise_pin, rightwise_pin, leftlimit_pin,rightlimit_pin, clutch_pin,timeout = 100):
+    def __init__(self, motorLeft, motorRight, leftLimit, rightLimit, leftTouch, rightTouch, timeout = 100):
 
-        self.leftlimitPin  = Pin(leftlimit_pin , Pin.IN)
-        self.rightlimitPin  = Pin(rightlimit_pin , Pin.IN)
-        
-        self.leftwisePin = Pin(leftwise_pin, Pin.OUT)
-        self.rightwisePin = Pin(rightwise_pin, Pin.OUT)
-        self.clutchPin = Pin(clutch_pin, Pin.OUT)
+        self.leftLimit  = Pin(leftLimit , Pin.IN)
+        self.rightLimit = Pin(rightLimit, Pin.IN)
+
+        self.motorLeft  = Pin(motorLeft, Pin.OUT)
+        self.motorRight = Pin(motorRight, Pin.OUT)
+        self.clutchPin  = Pin(clutch_pin, Pin.OUT)
         self.timeout = timeout
     def open(self):
         result = 1
