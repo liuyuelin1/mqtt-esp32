@@ -1,17 +1,13 @@
 import machine
-from machine import Pin,Timer,PWM
+from machine import Pin,Timer,PWM,UART
 import utime
+from libKalman import KalmanFiter
 
 #配置版本号
 VERSION = "V0.1.0"
 
 FilterScale=10
 FilterIndex=0
-DutyTmLF=[0]*FilterScale
-DutyTmRF=[0]*FilterScale
-DutyTmLR=[0]*FilterScale
-DutyTmRR=[0]*FilterScale
-
 #输出信息结构体：引脚，当前值，目标值，目标方向，当前方向,目标方向
 PwmInfo={
 "LF":{"PinOutput":12,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
@@ -19,93 +15,87 @@ PwmInfo={
 "LR":{"PinOutput":14,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
 "RR":{"PinOutput":27,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0}
 }
+
+# 初始化一个UART对象
+uart = UART(2, baudrate=115200, rx=5,tx=18,timeout=10)
+
 #遥控信息 引脚，开始时间，滤波位置，滤波buffer,更新计数，更新标志，速度:m/s
 ControlInfo={
-"FR":{"PinControl":5 ,"TempTM":0,"FilterIndex":0,"DutyTm":DutyTmLF,"Refresh":0,"RefreshFlag":0,"Speed":1},
-"LR":{"PinControl":18,"TempTM":0,"FilterIndex":0,"DutyTm":DutyTmRF,"Refresh":0,"RefreshFlag":0,"Speed":1},
-"UD":{"PinControl":19,"TempTM":0,"FilterIndex":0,"DutyTm":DutyTmRF,"Refresh":0,"RefreshFlag":0,"Speed":0},
-"RT":{"PinControl":21,"TempTM":0,"FilterIndex":0,"DutyTm":DutyTmLR,"Refresh":0,"RefreshFlag":0,"Speed":1}
+"FR":{"DutyTm":0,"Refresh":0,"RefreshFlag":0,"Speed":0},
+"LR":{"DutyTm":0,"Refresh":0,"RefreshFlag":0,"Speed":0},
+"UD":{"DutyTm":0,"Refresh":0,"RefreshFlag":0,"Speed":0},
+"RT":{"DutyTm":0,"Refresh":0,"RefreshFlag":0,"Speed":0}
 }
 
-def SetDutyTm(diff,Member):#记录一次占空比
-    global ControlInfo
-    ControlInfo[Member]["FilterIndex"]=ControlInfo[Member]["FilterIndex"]+1
-    if ControlInfo[Member]["FilterIndex"]>=FilterScale:
-        ControlInfo[Member]["FilterIndex"]=0
-    ControlInfo[Member]["DutyTm"][ControlInfo[Member]["FilterIndex"]]=diff
-    ControlInfo[Member]["Refresh"]=1
+def bytes_toint(firstbyte, secondbyte):
+    if not firstbyte & 0x80:
+        return firstbyte << 8 | secondbyte
+    return - (((firstbyte ^ 255) << 8) | (secondbyte ^ 255) + 1)
 
-def GetDutyTm(Member):#获取一次滤波后的占空比
+def CmdParsing(Data):
     global ControlInfo
-    diff=0
-    SignalMin = 1000#信号最小值
-    SignalMiddle = 1500#信号中值
-    SignalMax = 2000#信号最大值
-    Precision = 500#理解为范围（1500-2000）
-    SpeedMax = 2#m/s
-    AngleSpeedMax = 6.28#弧度值 2*Pi
-    AngleMax = 40
-    for i in range(1,FilterScale):
-        if diff<ControlInfo[Member]["DutyTm"][i-1]:
-            diff=ControlInfo[Member]["DutyTm"][i-1]
-    if ControlInfo[Member]["RefreshFlag"]:
-        if Member == "RT":#自转
-            if diff >SignalMiddle:
-                ControlInfo[Member]["Speed"] = (diff - SignalMiddle)/Precision * AngleSpeedMax
-            else:
-                ControlInfo[Member]["Speed"] = -((SignalMiddle - diff)/Precision * AngleSpeedMax)
-        elif Member == "UD":#上下表示抬头
-                ControlInfo[Member]["Speed"] = (diff - SignalMin)/(Precision*2) * AngleMax
-        else:#平面移动
-            if diff >SignalMiddle:
-                ControlInfo[Member]["Speed"] = (diff - SignalMiddle)/Precision * SpeedMax
-            else:
-                ControlInfo[Member]["Speed"] = -((SignalMiddle - diff)/Precision * SpeedMax)
+    if 0xaf == Data[0]:
+        ControlInfo["FR"]["DutyTm"] = bytes_toint(Data[1],Data[2])
+        ControlInfo["LR"]["DutyTm"] = bytes_toint(Data[3],Data[4])
+        ControlInfo["UD"]["DutyTm"] = bytes_toint(Data[5],Data[6])
+        ControlInfo["RT"]["DutyTm"] = bytes_toint(Data[7],Data[8])
 
-def FRcallback(p):
+def GetDutyTm():#获取占空比
     global ControlInfo
-    if p.value():
-        ControlInfo["FR"]["TempTM"]=utime.ticks_us()
+    SignalMin = 0#信号最小值
+    SignalMiddle = 2048#信号中值
+    SignalMax = 4096#信号最大值
+    Precision = 2048#理解为范围（SignalMiddle-SignalMin）
+    SpeedMax = 2#最大速度m/s
+    AngleSpeedMax = 6.28#最大角速度1转 弧度值 2*Pi
+    AngleMax = 40#最大角度
+    
+    #前后
+    Signal=ControlInfo["FR"]["DutyTm"]
+    if Signal >SignalMiddle:
+        ControlInfo["FR"]["Speed"] = (Signal - SignalMiddle)/Precision * SpeedMax
     else:
-        SetDutyTm(utime.ticks_diff(utime.ticks_us(),ControlInfo["FR"]["TempTM"]),"FR")
+        ControlInfo["FR"]["Speed"] = -((SignalMiddle - Signal)/Precision * SpeedMax)
 
-def LRcallback(p):
-    global ControlInfo
-    if p.value():
-        ControlInfo["LR"]["TempTM"]=utime.ticks_us()
+    #左右
+    Signal=ControlInfo["LR"]["DutyTm"]
+    if Signal >SignalMiddle:
+        ControlInfo["LR"]["Speed"] = (Signal - SignalMiddle)/Precision * SpeedMax
     else:
-        SetDutyTm(utime.ticks_diff(utime.ticks_us(),ControlInfo["LR"]["TempTM"]),"LR")
+        ControlInfo["LR"]["Speed"] = -((SignalMiddle - Signal)/Precision * SpeedMax)
 
-def UDcallback(p):
-    global ControlInfo
-    if p.value():
-        ControlInfo["UD"]["TempTM"]=utime.ticks_us()
-    else:
-        SetDutyTm(utime.ticks_diff(utime.ticks_us(),ControlInfo["UD"]["TempTM"]),"UD")
+    #上下
+    Signal=ControlInfo["UD"]["DutyTm"]
+    ControlInfo["UD"]["Speed"] = (Signal - SignalMin)/(Precision*2) * AngleMax
 
-def RTcallback(p):
-    global ControlInfo
-    if p.value():
-        ControlInfo["RT"]["TempTM"]=utime.ticks_us()
+    #自转
+    Signal=ControlInfo["RT"]["DutyTm"]
+    if Signal >SignalMiddle:
+        ControlInfo["RT"]["Speed"] = (Signal - SignalMiddle)/Precision * AngleSpeedMax
     else:
-        SetDutyTm(utime.ticks_diff(utime.ticks_us(),ControlInfo["RT"]["TempTM"]),"RT")
+        ControlInfo["RT"]["Speed"] = -((SignalMiddle - Signal)/Precision * AngleSpeedMax)
+
 
 Cnt=1
+InputFlag = 0;
 def timing(tim):
     global Cnt
-    global ControlInfo
-    if Cnt:
-        Cnt = 0
-        for key in ControlInfo.keys():
-            if ControlInfo[key]["Refresh"]:
-                ControlInfo[key]["RefreshFlag"]=1
-                ControlInfo[key]["Refresh"] = 0
-            else:
-                ControlInfo[key]["RefreshFlag"]=0
-            GetDutyTm(key)#更新遥控值 前后
-    else:
-        Cnt = 1
-        SpeedIntegration()#更新四轮速度
+    global InputFlag
+    global PwmInfo
+    if uart.any():
+        InputFlag = 1
+        utime.sleep_ms(1)
+        Data = uart.readline()
+        CmdParsing(Data)
+    GetDutyTm()#更新遥控值 前后
+    SpeedIntegration()#更新四轮速度
+    Cnt = Cnt + 1
+    if(Cnt > 10):#如果200ms内没更新，认为是失控，停止
+        if not InputFlag:
+            Cnt=0#急停
+        Cnt=0
+        InputFlag=0
+
 def time_init(ms):
     tm=Timer(4)
     tm.init(period=ms, mode=Timer.PERIODIC, callback=timing)
@@ -128,30 +118,18 @@ def SpeedIntegration():
             PwmInfo[key]["AimDir"] = 1
 
 def main(): 
+    global uart
     global ControlInfo
     global PwmInfo
-    #遥控输入脚，中断方式记录数据
-    InPutFR=Pin(ControlInfo["FR"]["PinControl"],Pin.IN,Pin.PULL_UP)
-    InPutLR=Pin(ControlInfo["LR"]["PinControl"],Pin.IN,Pin.PULL_UP)
-    InPutUD=Pin(ControlInfo["UD"]["PinControl"],Pin.IN,Pin.PULL_UP)
-    InPutRT=Pin(ControlInfo["RT"]["PinControl"],Pin.IN,Pin.PULL_UP)
-
-    InPutFR.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, handler=FRcallback)
-    InPutLR.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, handler=LRcallback)
-    InPutUD.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, handler=UDcallback)
-    InPutRT.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, handler=RTcallback)
-    
-    LFront = PWM(Pin(PwmInfo["LF"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=2500)#左前
-    RFront = PWM(Pin(PwmInfo["RF"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=2500)#右前
-    LRear  = PWM(Pin(PwmInfo["LR"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=2500)#左后
-    RRear  = PWM(Pin(PwmInfo["RR"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=2500)#右后
-    time_init(25)
+    global FilterScale
+    #初始化输出pwm
+    LFront = PWM(Pin(PwmInfo["LF"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=5)#左前
+    RFront = PWM(Pin(PwmInfo["RF"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=5)#右前
+    LRear  = PWM(Pin(PwmInfo["LR"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=5)#左后
+    RRear  = PWM(Pin(PwmInfo["RR"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=5)#右后
+    time_init(20)
     while True:
-        #更新周期
-        for key in PwmInfo.keys():
-            print(key)
-            print(PwmInfo[key]["AimSpeed"])
-            print(PwmInfo[key]["AimDir"])
+        print(PwmInfo["LF"]["AimSpeed"])
         utime.sleep_ms(1000)
         pass
 
