@@ -1,7 +1,6 @@
 import machine
 from machine import Pin,Timer,PWM,UART
 import utime
-from libKalman import KalmanFiter
 
 #配置版本号
 VERSION = "V0.1.0"
@@ -10,16 +9,15 @@ FilterScale=10
 FilterIndex=0
 #输出信息结构体：引脚，当前值，目标值，目标方向，当前方向,目标方向
 PwmInfo={
-"LF":{"PinOutput":12,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
-"RF":{"PinOutput":13,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
-"LR":{"PinOutput":14,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
-"RR":{"PinOutput":27,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0}
+"LF":{"PinOutput":2 ,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
+"RF":{"PinOutput":14,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
+"LR":{"PinOutput":12,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0},
+"RR":{"PinOutput":13,"NowSpeed":50,"AimSpeed":0,"NowDir":0,"AimDir":0}
 }
 
 # 初始化一个UART对象
-uart = UART(2, baudrate=115200, rx=5,tx=18,timeout=10)
+uart = UART(2, baudrate=115200, rx=5,tx=4,timeout=10)
 
-#遥控信息 引脚，开始时间，滤波位置，滤波buffer,更新计数，更新标志，速度:m/s
 ControlInfo={
 "FR":{"DutyTm":0,"Refresh":0,"RefreshFlag":0,"Speed":0},
 "LR":{"DutyTm":0,"Refresh":0,"RefreshFlag":0,"Speed":0},
@@ -34,6 +32,8 @@ def bytes_toint(firstbyte, secondbyte):
 
 def CmdParsing(Data):
     global ControlInfo
+    if len(Data)<10:
+        return
     if 0xaf == Data[0]:
         ControlInfo["FR"]["DutyTm"] = bytes_toint(Data[1],Data[2])
         ControlInfo["LR"]["DutyTm"] = bytes_toint(Data[3],Data[4])
@@ -85,7 +85,7 @@ def timing(tim):
     if uart.any():
         InputFlag = 1
         utime.sleep_ms(1)
-        Data = uart.readline()
+        Data = uart.read()
         CmdParsing(Data)
     GetDutyTm()#更新遥控值 前后
     SpeedIntegration()#更新四轮速度
@@ -129,7 +129,7 @@ def main():
     RRear  = PWM(Pin(PwmInfo["RR"]["PinOutput"]), freq=PwmInfo["LF"]["NowSpeed"], duty=5)#右后
     time_init(20)
     while True:
-        print(PwmInfo["LF"]["AimSpeed"])
+        print(ControlInfo["FR"]["DutyTm"])
         utime.sleep_ms(1000)
         pass
 
