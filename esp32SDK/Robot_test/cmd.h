@@ -14,8 +14,8 @@ typedef struct {
 } CAR_INFO;
 
 typedef struct {
-    uint32_t CTime;//当前电平
-    uint32_t Speed;
+    uint32_t CTime;//时间
+    uint32_t Speed;//速度
 } CHANNEL_INFO;
 
 typedef struct {
