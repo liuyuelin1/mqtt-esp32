@@ -5,9 +5,8 @@
 typedef struct {
     uint8_t Value;//当前电平
     uint8_t Dir;//方向
+    uint8_t Die;//死区
     uint64_t ClkCnt; //速度
-    int32_t Group;
-    int32_t Timer;
 } WHEEL_INFO;
 
 typedef struct {
@@ -24,10 +23,13 @@ typedef struct {
 
 
 typedef struct{
+    CHANNEL_INFO XX;//前后油门
+    CHANNEL_INFO Onoff; //左右油门
     CHANNEL_INFO BAfter;//前后油门
     CHANNEL_INFO LRight; //左右油门
     CHANNEL_INFO UDown;//云台上下
     CHANNEL_INFO Rotating; //自转
+    uint8_t PowerDown;
 } CONTROL_INFO;
 
 extern CAR_INFO TheCar;
