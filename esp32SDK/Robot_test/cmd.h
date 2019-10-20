@@ -17,11 +17,17 @@ typedef struct {
     WHEEL_INFO RRear;//右后
 } CAR_INFO;
 
+typedef struct {
+    uint64_t UpTm; 
+    int32_t Speed;//速度
+} CHANNEL_INFO;
+
+
 typedef struct{
-    int32_t BAfter;//前后油门
-    int32_t LRight; //左右油门
-    int32_t UDown;//云台上下
-    int32_t Rotating; //自转
+    CHANNEL_INFO BAfter;//前后油门
+    CHANNEL_INFO LRight; //左右油门
+    CHANNEL_INFO UDown;//云台上下
+    CHANNEL_INFO Rotating; //自转
 } CONTROL_INFO;
 
 extern CAR_INFO TheCar;

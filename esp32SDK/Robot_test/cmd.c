@@ -11,21 +11,28 @@
 #include "driver/timer.h"
 #include "driver/gpio.h"
 #include "esp_types.h"
+#include "esp_timer.h"
 
 
-
-#define GPIO_LF_DIR    13
-#define GPIO_RF_DIR    27
-#define GPIO_LR_DIR    18//5
+#define GPIO_LF_DIR    32
+#define GPIO_RF_DIR    23
+#define GPIO_LR_DIR    12//5
 #define GPIO_RR_DIR    21
 #define GPIO_DIR_SEL  ((1ULL<<GPIO_LF_DIR) | (1ULL<<GPIO_RF_DIR) | (1ULL<<GPIO_LR_DIR) | (1ULL<<GPIO_RR_DIR))
 
-#define GPIO_LF_PWM     2//12
-#define GPIO_RF_PWM     4//26
-#define GPIO_LR_PWM     5//18
-#define GPIO_RR_PWM     22
+#define GPIO_LF_PWM     33//12
+#define GPIO_RF_PWM     22//26
+#define GPIO_LR_PWM     13//18
+#define GPIO_RR_PWM     19
 #define GPIO_PWM_SEL  ((1ULL<<GPIO_LF_PWM) | (1ULL<<GPIO_RF_PWM) | (1ULL<<GPIO_LR_PWM) | (1ULL<<GPIO_RR_PWM))
 #define GPIO_SEL (GPIO_DIR_SEL | GPIO_PWM_SEL)
+
+#define GPIO_BA_CON    34
+#define GPIO_LR_CON    35
+#define GPIO_UD_CON    39//5
+#define GPIO_RO_CON    36
+#define GPIO_CON_SEL  ((1ULL<<GPIO_BA_CON) | (1ULL<<GPIO_LR_CON) | (1ULL<<GPIO_UD_CON) | (1ULL<<GPIO_RO_CON))
+
 
 #define TIMER_DIVIDER         16  //  Hardware timer clock divider
 #define TIMER_SCALE           (TIMER_BASE_CLK / TIMER_DIVIDER)  // convert counter value to seconds
@@ -33,6 +40,7 @@
 #define TIMER_INTERVAL1_SEC   (5.78)   // sample test interval for the second timer
 #define TEST_WITHOUT_RELOAD   0        // testing will be done without auto reload
 #define TEST_WITH_RELOAD      1        // testing will be done with auto reload
+#define ESP_INTR_FLAG_DEFAULT 0
 
 typedef struct {
     int type;  // the type of timer's event
@@ -45,46 +53,87 @@ CAR_INFO TheCar={
     .LFront = {
         .Value=0,//当前电平
         .Dir=0,//方向
-        .ClkCnt=0x190, //速度
+        .ClkCnt=TIMER_SCALE, //速度
         .Group=0,
         .Timer=0,
     },
     .RFront = {
         .Value=0,//当前电平
         .Dir=0,//方向
-        .ClkCnt=0x190, //速度
+        .ClkCnt=TIMER_SCALE, //速度
         .Group=0,
         .Timer=1,
     },
     .LRear = {
         .Value=0,//当前电平
         .Dir=0,//方向
-        .ClkCnt=0x190, //速度
+        .ClkCnt=TIMER_SCALE, //速度
         .Group=1,
         .Timer=0,
     },
     .RRear = {
         .Value=0,//当前电平
         .Dir=0,//方向
-        .ClkCnt=0x190, //速度
+        .ClkCnt=TIMER_SCALE, //速度
         .Group=1,
         .Timer=1,
     },
 };
 CONTROL_INFO TheControl ={
-    .BAfter = 10,
-    .LRight = 0,
-    .UDown  = 0,
-    .Rotating = 0,
+    .BAfter = {
+		.Speed = 0,
+		.UpTm = 0,
+		},
+    .LRight =  {
+		.Speed = 0,
+		.UpTm = 0,
+		},
+    .UDown  =  {
+		.Speed = 0,
+		.UpTm = 0,
+		},
+    .Rotating =  {
+		.Speed = 40,
+		.UpTm = 0,
+		},
     };
+
+void GetDutyTm(void){//获取占空比
+	int32_t SignalMin = 1000;//#信号最小值
+	int32_t SignalMiddle = 1500;//#信号中值
+	int32_t SignalMax = 2000;//#信号最大值
+	double Precision = 500.0;//#理解为范围（SignalMiddle-SignalMin）
+	int32_t SpeedMax = 5000;//#最大速度脉冲数
+	int32_t AngleSpeedMax = 9890;//#最大角速度1转 弧度值 2*Pi
+	int32_t AngleMax = 40;//#最大角度
+	int32_t Signal = 0;
+	
+//#前后
+	Signal=(int32_t)TheControl.BAfter.UpTm;
+	TheControl.BAfter.Speed = (Signal - SignalMiddle)/Precision * SpeedMax;
+
+//#左右
+	Signal=(int32_t)TheControl.LRight.UpTm;
+	TheControl.LRight.Speed = (Signal - SignalMiddle)/Precision * SpeedMax;
+
+//#上下
+	Signal=(int32_t)TheControl.UDown.UpTm;
+	TheControl.UDown.Speed = (Signal - SignalMin)/(Precision*2) * AngleMax;
+
+//#自转
+	Signal=(int32_t)TheControl.Rotating.UpTm;
+	TheControl.Rotating.Speed = (Signal - SignalMiddle)/Precision * AngleSpeedMax;
+
+}
+
 
 uint64_t Cnt[4]={0};
 void SpeedIntegration(void){
     int32_t ClkCnt[4] = {0};
-    ClkCnt[0]  = TheControl.BAfter - TheControl.LRight + TheControl.Rotating;
-    ClkCnt[1]  = TheControl.BAfter + TheControl.LRight - TheControl.Rotating;
-    ClkCnt[2]  = TheControl.BAfter - TheControl.LRight - TheControl.Rotating;
-    ClkCnt[3]  = TheControl.BAfter + TheControl.LRight + TheControl.Rotating;
+    ClkCnt[0]  = TheControl.BAfter.Speed + TheControl.LRight.Speed + TheControl.Rotating.Speed;
+    ClkCnt[1]  = TheControl.BAfter.Speed - TheControl.LRight.Speed - TheControl.Rotating.Speed;
+    ClkCnt[2]  = TheControl.BAfter.Speed - TheControl.LRight.Speed + TheControl.Rotating.Speed;
+    ClkCnt[3]  = TheControl.BAfter.Speed + TheControl.LRight.Speed - TheControl.Rotating.Speed;
     if(0 == ClkCnt[0]){
         TheCar.LFront.ClkCnt = TIMER_SCALE;
      }
@@ -102,11 +151,11 @@ void SpeedIntegration(void){
      }
     else if(0 > ClkCnt[1]){
         TheCar.RFront.ClkCnt = TIMER_SCALE/(-1*ClkCnt[1]);
-        TheCar.RFront.Dir = 1;
+        TheCar.RFront.Dir = 0;
     }
     else{
         TheCar.RFront.ClkCnt = TIMER_SCALE/ClkCnt[1];
-        TheCar.RFront.Dir = 0;
+        TheCar.RFront.Dir = 1;
     }
     
     if(0 == ClkCnt[2]){
@@ -126,17 +175,62 @@ void SpeedIntegration(void){
      }
     else if(0 > ClkCnt[3]){
         TheCar.RRear.ClkCnt = TIMER_SCALE/(-1*ClkCnt[3]);
-        TheCar.RRear.Dir = 1;
+        TheCar.RRear.Dir = 0;
     }
     else{
         TheCar.RRear.ClkCnt = TIMER_SCALE/ClkCnt[3];
-        TheCar.RRear.Dir = 0;
+        TheCar.RRear.Dir = 1;
     }
     gpio_set_level(GPIO_LF_DIR, TheCar.LFront.Dir);
     gpio_set_level(GPIO_RF_DIR, TheCar.RFront.Dir);
     gpio_set_level(GPIO_LR_DIR, TheCar.LRear.Dir);
     gpio_set_level(GPIO_RR_DIR, TheCar.RRear.Dir);
 }
+
+static void IRAM_ATTR BA_isr_handler(void* arg)
+{
+	static uint64_t StartTm=0;
+	if(gpio_get_level(GPIO_BA_CON)){
+		StartTm = esp_timer_get_time();
+	}
+	else{
+		TheControl.BAfter.UpTm = esp_timer_get_time() - StartTm;
+	}
+}
+static void IRAM_ATTR LR_isr_handler(void* arg)
+{
+	static uint64_t StartTm=0;
+	if(gpio_get_level(GPIO_LR_CON)){
+		StartTm = esp_timer_get_time();
+	}
+	else{
+		TheControl.LRight.UpTm = esp_timer_get_time() - StartTm;
+	}
+
+}
+static void IRAM_ATTR UD_isr_handler(void* arg)
+{
+	static uint64_t StartTm=0;
+	if(gpio_get_level(GPIO_UD_CON)){
+		StartTm = esp_timer_get_time();
+	}
+	else{
+		TheControl.UDown.UpTm = esp_timer_get_time() - StartTm;
+	}
+
+}
+static void IRAM_ATTR RO_isr_handler(void* arg)
+{
+	static uint64_t StartTm=0;
+	if(gpio_get_level(GPIO_RO_CON)){
+		StartTm = esp_timer_get_time();
+	}
+	else{
+		TheControl.Rotating.UpTm = esp_timer_get_time() - StartTm;
+	}
+
+}
+
 
 void GPIO_init(void){
     gpio_config_t io_conf;
@@ -145,7 +239,25 @@ void GPIO_init(void){
     io_conf.pin_bit_mask = GPIO_SEL;
     io_conf.pull_up_en = 1;
     gpio_config(&io_conf);
+
+	    //interrupt of rising edge
+    io_conf.intr_type = GPIO_INTR_ANYEDGE;
+    //bit mask of the pins, use GPIO4/5 here
+    io_conf.pin_bit_mask = GPIO_CON_SEL;
+    //set as input mode    
+    io_conf.mode = GPIO_MODE_INPUT;
+    //enable pull-up mode
+    io_conf.pull_up_en = 0;
+    gpio_config(&io_conf);
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+    //hook isr handler for specific gpio pin
+    gpio_isr_handler_add(GPIO_BA_CON, BA_isr_handler, (void*) GPIO_BA_CON);
+    gpio_isr_handler_add(GPIO_LR_CON, LR_isr_handler, (void*) GPIO_LR_CON);
+    gpio_isr_handler_add(GPIO_UD_CON, UD_isr_handler, (void*) GPIO_UD_CON);
+    gpio_isr_handler_add(GPIO_RO_CON, RO_isr_handler, (void*) GPIO_RO_CON);
 }
+
+
 /*
  * Timer group0 ISR handler
  */
@@ -296,13 +408,16 @@ void inline print_timer_counter(uint64_t counter_value)
 void timer_example_evt_task(void *arg)
 {
     while (1) {
+		GetDutyTm();
         SpeedIntegration();
-    	vTaskDelay(pdMS_TO_TICKS(1000));
+    	vTaskDelay(pdMS_TO_TICKS(50));
         print_timer_counter(TheCar.LFront.ClkCnt);
-        print_timer_counter(Cnt[0]);
-	    print_timer_counter(Cnt[1]);
-	    print_timer_counter(Cnt[2]);
-	    print_timer_counter(Cnt[3]);
+        print_timer_counter(TheCar.RFront.ClkCnt);
+        print_timer_counter(TheCar.LRear.ClkCnt);
+        print_timer_counter(TheCar.RRear.ClkCnt);
+        print_timer_counter(TheControl.BAfter.UpTm);
+        printf("Speed = %d\n",TheControl.BAfter.Speed);
+
 		Cnt[0]=0;
 		Cnt[1]=0;
 		Cnt[2]=0;
@@ -320,15 +435,5 @@ void SystemInit(void){
     example_timer_init(TIMER_GROUP_0,TIMER_1, timer_group0_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
     example_timer_init(TIMER_GROUP_1,TIMER_0, timer_group1_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
     example_timer_init(TIMER_GROUP_1,TIMER_1, timer_group1_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-//    example_tg0_timer_init(TIMER_0, TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-//    example_tg0_timer_init(TIMER_0, TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-
-    //wheel_timer_init(TheCar.RFront.Group,TheCar.RFront.Timer, TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-    printf("wheel_timer_init1\n");
-    //wheel_timer_init(TheCar.LFront.Group,TheCar.LFront.Timer, TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-    printf("wheel_timer_init2\n");
-    //wheel_timer_init(TheCar.LRear.Group,TheCar.LRear.Timer, TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-    printf("wheel_timer_init3\n");
-    //wheel_timer_init(TheCar.RRear.Group,TheCar.RRear.Timer, TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
 }
 
