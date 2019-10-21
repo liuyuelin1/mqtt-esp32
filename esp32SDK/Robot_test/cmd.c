@@ -12,7 +12,15 @@
 #include "driver/gpio.h"
 #include "esp_types.h"
 #include "esp_timer.h"
+#include "driver/ledc.h"
 
+#define BA_COR         7
+#define LR_COR         20
+#define UD_COR         2
+#define RO_COR         20
+
+#define PWM_CH_NUM     4
+#define PWM_FREQ       1000
 
 #define GPIO_LF_DIR    25
 #define GPIO_LF_PWM    26
@@ -35,7 +43,7 @@
 #define GPIO_PWM_SEL  ((1ULL<<GPIO_LF_PWM) | (1ULL<<GPIO_RF_PWM) | (1ULL<<GPIO_LR_PWM) | (1ULL<<GPIO_RR_PWM))
 #define GPIO_OF_SEL   ((1ULL<<GPIO_LF_OF ) | (1ULL<<GPIO_RF_OF ) | (1ULL<<GPIO_LR_OF ) | (1ULL<<GPIO_RR_OF ))
 
-#define GPIO_SEL (GPIO_DIR_SEL | GPIO_PWM_SEL | GPIO_OF_SEL)
+#define GPIO_SEL (GPIO_DIR_SEL | GPIO_OF_SEL)
 
 #define GPIO_XX_CON    36
 #define GPIO_OF_CON    39
@@ -69,24 +77,30 @@ CAR_INFO TheCar={
         .Dir=0,//方向
         .ClkCnt=TIMER_SCALE, //速度
         .Die=1,
+        .Ch=LEDC_CHANNEL_0,
     },
     .RFront = {
         .Value=0,//当前电平
         .Dir=0,//方向
         .ClkCnt=TIMER_SCALE, //速度
         .Die=1,
+		.Ch=LEDC_CHANNEL_1,
     },
     .LRear = {
         .Value=0,//当前电平
         .Dir=0,//方向
         .ClkCnt=TIMER_SCALE, //速度
         .Die=1,
+		.Ch=LEDC_CHANNEL_2,
+
     },
     .RRear = {
         .Value=0,//当前电平
         .Dir=0,//方向
         .ClkCnt=TIMER_SCALE, //速度
         .Die=1,
+		.Ch=LEDC_CHANNEL_3,
+
     },
 };
 CONTROL_INFO TheControl ={
@@ -142,8 +156,8 @@ void GetDutyTm(void){//获取占空比
 	int32_t SignalMiddle = 1500;//#信号中值
 	int32_t SignalMax = 2000;//#信号最大值
 	double Precision = 500.0;//#理解为范围（SignalMiddle-SignalMin）
-	int32_t SpeedMax = 500;//#最大速度脉冲数
-	int32_t AngleSpeedMax = 500;//#最大角速度1转 弧度值 2*Pi
+	int32_t SpeedMax = 4000;//#最大速度脉冲数
+	int32_t AngleSpeedMax = 6.28*0.35*0.28*4000;//#最大角速度1转 弧度值 2*Pi
 	int32_t AngleMax = 40;//#最大角度
 	int32_t Signal = 0;
 //#Power开关
@@ -174,7 +188,7 @@ void GetDutyTm(void){//获取占空比
 }
 
 void SpeedIntegration(void){
-	int32_t DieCritical = 50;
+	int32_t DieCritical = 80;
     int32_t ClkCnt[4] = {0};
 	TheCar.LFront.Die = 0;
 	TheCar.RFront.Die = 0;
@@ -185,54 +199,54 @@ void SpeedIntegration(void){
     ClkCnt[2]  = TheControl.BAfter.Speed - TheControl.LRight.Speed + TheControl.Rotating.Speed;
     ClkCnt[3]  = TheControl.BAfter.Speed + TheControl.LRight.Speed - TheControl.Rotating.Speed;
     if(DieCritical > ClkCnt[0] && -1*DieCritical < ClkCnt[0]){
-        TheCar.LFront.ClkCnt = TIMER_SCALE;
+        TheCar.LFront.ClkCnt = 0;
 		TheCar.LFront.Die = 1;
      }
     else if(0 > ClkCnt[0]){
-        TheCar.LFront.ClkCnt = TIMER_SCALE/(-1*ClkCnt[0]);
+        TheCar.LFront.ClkCnt = -1*ClkCnt[0];
         TheCar.LFront.Dir = 1;
     }
     else{
-        TheCar.LFront.ClkCnt = TIMER_SCALE/ClkCnt[0];
+        TheCar.LFront.ClkCnt = ClkCnt[0];
         TheCar.LFront.Dir = 0;
     }
     
     if(DieCritical > ClkCnt[1] && -1*DieCritical < ClkCnt[1]){
-        TheCar.RFront.ClkCnt = TIMER_SCALE;
+        TheCar.RFront.ClkCnt = 0;
 		TheCar.RFront.Die = 1;
      }
     else if(0 > ClkCnt[1]){
-        TheCar.RFront.ClkCnt = TIMER_SCALE/(-1*ClkCnt[1]);
+        TheCar.RFront.ClkCnt = -1*ClkCnt[1];
         TheCar.RFront.Dir = 0;
     }
     else{
-        TheCar.RFront.ClkCnt = TIMER_SCALE/ClkCnt[1];
+        TheCar.RFront.ClkCnt = ClkCnt[1];
         TheCar.RFront.Dir = 1;
     }
     
     if(DieCritical > ClkCnt[2] && -1*DieCritical < ClkCnt[2]){
-        TheCar.LRear.ClkCnt = TIMER_SCALE;
+        TheCar.LRear.ClkCnt = 0;
 		TheCar.LRear.Die = 1;
      }
     else if(0 > ClkCnt[2]){
-        TheCar.LRear.ClkCnt = TIMER_SCALE/(-1*ClkCnt[2]);
+        TheCar.LRear.ClkCnt = -1*ClkCnt[2];
         TheCar.LRear.Dir = 1;
     }
     else{
-        TheCar.LRear.ClkCnt = TIMER_SCALE/ClkCnt[2];
+        TheCar.LRear.ClkCnt = ClkCnt[2];
         TheCar.LRear.Dir = 0;
     }
     
     if(DieCritical > ClkCnt[3] && -1*DieCritical < ClkCnt[3]){
-        TheCar.RRear.ClkCnt = TIMER_SCALE;
+        TheCar.RRear.ClkCnt = 0;
 		TheCar.RRear.Die = 1;
      }
     else if(0 > ClkCnt[3]){
-        TheCar.RRear.ClkCnt = TIMER_SCALE/(-1*ClkCnt[3]);
+        TheCar.RRear.ClkCnt = -1*ClkCnt[3];
         TheCar.RRear.Dir = 0;
     }
     else{
-        TheCar.RRear.ClkCnt = TIMER_SCALE/ClkCnt[3];
+        TheCar.RRear.ClkCnt = ClkCnt[3];
         TheCar.RRear.Dir = 1;
     }
     gpio_set_level(GPIO_LF_DIR, TheCar.LFront.Dir);
@@ -240,8 +254,19 @@ void SpeedIntegration(void){
     gpio_set_level(GPIO_LR_DIR, TheCar.LRear.Dir);
     gpio_set_level(GPIO_RR_DIR, TheCar.RRear.Dir);
 	UpdatePower();
-	printf("BA:%6d,LR%6d,RO:%6d\n",TheControl.BAfter.Speed,TheControl.LRight.Speed,TheControl.Rotating.Speed);
-	printf("ClkCnt[0]=%d\n",ClkCnt[0]);
+	printf("BA:0x%6x,LR:0x%6x,RO:0x%6x,UD:0x%6x\n",(uint32_t)TheControl.BAfter.UpTm,(uint32_t)TheControl.LRight.UpTm,(uint32_t)TheControl.Rotating.UpTm,(uint32_t)TheControl.UDown.UpTm);
+
+	ledc_set_duty(LEDC_HIGH_SPEED_MODE, TheCar.LFront.Ch, TheCar.LFront.ClkCnt);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, TheCar.LFront.Ch);
+
+	ledc_set_duty(LEDC_HIGH_SPEED_MODE, TheCar.RFront.Ch, TheCar.RFront.ClkCnt);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, TheCar.RFront.Ch);
+
+	ledc_set_duty(LEDC_HIGH_SPEED_MODE, TheCar.LRear.Ch, TheCar.LRear.ClkCnt);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, TheCar.LRear.Ch);
+
+	ledc_set_duty(LEDC_HIGH_SPEED_MODE, TheCar.RRear.Ch, TheCar.RRear.ClkCnt);
+	ledc_update_duty(LEDC_HIGH_SPEED_MODE, TheCar.RRear.Ch);
 }
 
 static void IRAM_ATTR OF_isr_handler(void* arg)
@@ -273,7 +298,7 @@ static void IRAM_ATTR BA_isr_handler(void* arg)
 		StartTm = esp_timer_get_time();
 	}
 	else{
-		TheControl.BAfter.UpTm = esp_timer_get_time() - StartTm;
+		TheControl.BAfter.UpTm = esp_timer_get_time() - StartTm + BA_COR;
 	}
 }
 static void IRAM_ATTR LR_isr_handler(void* arg)
@@ -283,7 +308,7 @@ static void IRAM_ATTR LR_isr_handler(void* arg)
 		StartTm = esp_timer_get_time();
 	}
 	else{
-		TheControl.LRight.UpTm = esp_timer_get_time() - StartTm;
+		TheControl.LRight.UpTm = esp_timer_get_time() - StartTm + LR_COR;
 	}
 
 }
@@ -294,7 +319,7 @@ static void IRAM_ATTR UD_isr_handler(void* arg)
 		StartTm = esp_timer_get_time();
 	}
 	else{
-		TheControl.UDown.UpTm = esp_timer_get_time() - StartTm;
+		TheControl.UDown.UpTm = esp_timer_get_time() - StartTm + UD_COR;
 	}
 
 }
@@ -305,10 +330,11 @@ static void IRAM_ATTR RO_isr_handler(void* arg)
 		StartTm = esp_timer_get_time();
 	}
 	else{
-		TheControl.Rotating.UpTm = esp_timer_get_time() - StartTm;
+		TheControl.Rotating.UpTm = esp_timer_get_time() - StartTm + RO_COR;
 	}
 
 }
+
 
 void GPIO_init(void){
     gpio_config_t io_conf;
@@ -331,6 +357,56 @@ void GPIO_init(void){
     gpio_isr_handler_add(GPIO_RO_CON, RO_isr_handler, (void*) GPIO_RO_CON);
     gpio_isr_handler_add(GPIO_OF_CON, OF_isr_handler, (void*) GPIO_OF_CON);
     gpio_isr_handler_add(GPIO_XX_CON, XX_isr_handler, (void*) GPIO_XX_CON);
+	
+    int ch;
+
+    /*
+     * Prepare and set configuration of timers
+     * that will be used by LED Controller
+     */
+    ledc_timer_config_t ledc_timer = {
+        .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
+        .freq_hz = PWM_FREQ,                      // frequency of PWM signal
+        .speed_mode = LEDC_HIGH_SPEED_MODE,           // timer mode
+        .timer_num = LEDC_TIMER_0            // timer index
+    };
+    // Set configuration of timer0 for high speed channels
+    ledc_timer_config(&ledc_timer);
+
+	ledc_channel_config_t ledc_channel[PWM_CH_NUM] = {
+		{
+			.channel	= LEDC_CHANNEL_0,
+			.duty		= 0,
+			.gpio_num	= GPIO_LF_PWM,
+			.speed_mode = LEDC_HIGH_SPEED_MODE,
+			.timer_sel	= LEDC_TIMER_0
+		},
+		{
+			.channel	= LEDC_CHANNEL_1,
+			.duty		= 0,
+			.gpio_num	= GPIO_RF_PWM,
+			.speed_mode = LEDC_HIGH_SPEED_MODE,
+			.timer_sel	= LEDC_TIMER_0
+		},
+		{
+			.channel	= LEDC_CHANNEL_2,
+			.duty		= 0,
+			.gpio_num	= GPIO_LR_PWM,
+			.speed_mode = LEDC_HIGH_SPEED_MODE,
+			.timer_sel	= LEDC_TIMER_0
+		},
+		{
+			.channel	= LEDC_CHANNEL_3,
+			.duty		= 0,
+			.gpio_num	= GPIO_RR_PWM,
+			.speed_mode = LEDC_HIGH_SPEED_MODE,
+			.timer_sel	= LEDC_TIMER_0
+		},
+	};
+	for (ch = 0; ch < PWM_CH_NUM; ch++) {
+        ledc_channel_config(&ledc_channel[ch]);
+    }
+	ledc_fade_func_install(0);
 }
 
 /*
@@ -497,9 +573,9 @@ void SystemInit(void){
      printf("GPIO_init\n");
     GPIO_init();
     printf("wheel_timer_init0\n");
-    example_timer_init(TIMER_GROUP_0,TIMER_0, timer_group0_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-    example_timer_init(TIMER_GROUP_0,TIMER_1, timer_group0_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-    example_timer_init(TIMER_GROUP_1,TIMER_0, timer_group1_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
-    example_timer_init(TIMER_GROUP_1,TIMER_1, timer_group1_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
+//    example_timer_init(TIMER_GROUP_0,TIMER_0, timer_group0_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
+//    example_timer_init(TIMER_GROUP_0,TIMER_1, timer_group0_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
+//    example_timer_init(TIMER_GROUP_1,TIMER_0, timer_group1_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
+//    example_timer_init(TIMER_GROUP_1,TIMER_1, timer_group1_isr,TEST_WITHOUT_RELOAD, TIMER_INTERVAL0_SEC);
 }
 

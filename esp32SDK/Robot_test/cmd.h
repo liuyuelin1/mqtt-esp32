@@ -6,6 +6,7 @@ typedef struct {
     uint8_t Value;//当前电平
     uint8_t Dir;//方向
     uint8_t Die;//死区
+    uint8_t Ch;//死区
     uint64_t ClkCnt; //速度
 } WHEEL_INFO;
 
