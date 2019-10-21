@@ -39,11 +39,10 @@
 
 #define GPIO_XX_CON    36
 #define GPIO_OF_CON    39
-#define GPIO_RO_CON    34
+#define GPIO_LR_CON    34
 #define GPIO_UD_CON    35
 #define GPIO_BA_CON    32
-#define GPIO_LR_CON    33
-  
+#define GPIO_RO_CON    33  
 
 #define GPIO_CON_SEL  ((1ULL<<GPIO_BA_CON) | (1ULL<<GPIO_LR_CON) | (1ULL<<GPIO_UD_CON) | (1ULL<<GPIO_RO_CON)\
 	 | (1ULL<<GPIO_OF_CON) | (1ULL<<GPIO_XX_CON))
