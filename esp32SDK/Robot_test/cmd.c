@@ -151,6 +151,14 @@ void UpdatePower(void){
 	gpio_set_level(GPIO_RR_OF, Value[3]);
 }
 
+void CleanUpTm(void){
+    TheControl.Onoff.UpTm = 0;
+    TheControl.BAfter.UpTm = 1500;
+    TheControl.LRight.UpTm = 1500;
+    TheControl.UDown.UpTm = 1500;
+    TheControl.Rotating.UpTm = 1500;
+}
+
 void GetDutyTm(void){//获取占空比
 	int32_t SignalMin = 1000;//#信号最小值
 	int32_t SignalMiddle = 1500;//#信号中值
@@ -160,6 +168,8 @@ void GetDutyTm(void){//获取占空比
 	int32_t AngleSpeedMax = 6.28*0.35*0.28*4000;//#最大角速度1转 弧度值 2*Pi
 	int32_t AngleMax = 40;//#最大角度
 	int32_t Signal = 0;
+    int32_t SignalMiddleMin = 1490;//#信号中值最低，用来消除中值误差
+    int32_t SignalMiddleMax = 1510;//#信号中值最高，用来消除中值误差
 //#Power开关
 	Signal=(int32_t)TheControl.Onoff.UpTm;
 	if(Signal > SignalMiddle){
@@ -171,24 +181,43 @@ void GetDutyTm(void){//获取占空比
 
 //#前后
 	Signal=(int32_t)TheControl.BAfter.UpTm;
-	TheControl.BAfter.Speed = (Signal - SignalMiddle)/Precision * SpeedMax;
+    if(SignalMiddleMin < Signal && Signal < SignalMiddleMax){
+        TheControl.BAfter.Speed = 0;
+    }
+    else{
+        TheControl.BAfter.Speed = (Signal - SignalMiddle)/Precision * SpeedMax;
+    }
 
 //#左右
 	Signal=(int32_t)TheControl.LRight.UpTm;
-	TheControl.LRight.Speed = (Signal - SignalMiddle)/Precision * SpeedMax;
+    if(SignalMiddleMin < Signal && Signal < SignalMiddleMax){
+        TheControl.LRight.Speed = 0;
+    }
+    else{
+        TheControl.LRight.Speed = (Signal - SignalMiddle)/Precision * SpeedMax;
+    }
 
 //#上下
 	Signal=(int32_t)TheControl.UDown.UpTm;
-	TheControl.UDown.Speed = (Signal - SignalMin)/(Precision*2) * AngleMax;
+    if(SignalMiddleMin < Signal && Signal < SignalMiddleMax){
+        TheControl.UDown.Speed = 0;
+    }
+    else{
+        TheControl.UDown.Speed = (Signal - SignalMin)/(Precision*2) * AngleMax;
+    }
 
 //#自转
 	Signal=(int32_t)TheControl.Rotating.UpTm;
-	TheControl.Rotating.Speed = (Signal - SignalMiddle)/Precision * AngleSpeedMax;
-
+    if(SignalMiddleMin < Signal && Signal < SignalMiddleMax){
+        TheControl.Rotating.Speed = 0;
+    }
+    else{
+        TheControl.Rotating.Speed = (Signal - SignalMiddle)/Precision * AngleSpeedMax;
+    }
+    CleanUpTm();//及时清除遥控数据，遥控异常断开时自动停止
 }
 
 void SpeedIntegration(void){
-	int32_t DieCritical = 80;
     int32_t ClkCnt[4] = {0};
 	TheCar.LFront.Die = 0;
 	TheCar.RFront.Die = 0;
@@ -198,7 +227,7 @@ void SpeedIntegration(void){
     ClkCnt[1]  = TheControl.BAfter.Speed - TheControl.LRight.Speed - TheControl.Rotating.Speed;
     ClkCnt[2]  = TheControl.BAfter.Speed - TheControl.LRight.Speed + TheControl.Rotating.Speed;
     ClkCnt[3]  = TheControl.BAfter.Speed + TheControl.LRight.Speed - TheControl.Rotating.Speed;
-    if(DieCritical > ClkCnt[0] && -1*DieCritical < ClkCnt[0]){
+    if(0 == ClkCnt[0]){
         TheCar.LFront.ClkCnt = 0;
 		TheCar.LFront.Die = 1;
      }
@@ -211,7 +240,7 @@ void SpeedIntegration(void){
         TheCar.LFront.Dir = 0;
     }
     
-    if(DieCritical > ClkCnt[1] && -1*DieCritical < ClkCnt[1]){
+    if(0 == ClkCnt[1]){
         TheCar.RFront.ClkCnt = 0;
 		TheCar.RFront.Die = 1;
      }
@@ -224,7 +253,7 @@ void SpeedIntegration(void){
         TheCar.RFront.Dir = 1;
     }
     
-    if(DieCritical > ClkCnt[2] && -1*DieCritical < ClkCnt[2]){
+    if(0 == ClkCnt[2]){
         TheCar.LRear.ClkCnt = 0;
 		TheCar.LRear.Die = 1;
      }
@@ -237,7 +266,7 @@ void SpeedIntegration(void){
         TheCar.LRear.Dir = 0;
     }
     
-    if(DieCritical > ClkCnt[3] && -1*DieCritical < ClkCnt[3]){
+    if(0 == ClkCnt[3]){
         TheCar.RRear.ClkCnt = 0;
 		TheCar.RRear.Die = 1;
      }
