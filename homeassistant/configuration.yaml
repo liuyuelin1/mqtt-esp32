@@ -1,0 +1,133 @@
+homeassistant:
+  # 正在运行的位置名称
+  name: Home
+  # 计算太阳升降的位置
+  latitude: 43.879577
+  longitude: 125.295352
+  # 影响天气的海拔
+  elevation: 200
+  # 长度单位
+  unit_system: metric
+  # 时区
+  time_zone: Asia/Shanghai
+  # 自定义文件
+  #customize: !include customize.yaml
+# 默认配置(frontend, api, etc)
+default_config:
+
+# 启动时显示介绍信息
+introduction:
+# Uncomment this if you are using SSL/TLS, running in Docker container, etc.
+http:
+    base_url: localhost:8123
+
+sensor:
+  - platform: yr           
+    name: Weather
+    forecast: 24           #未来24小时天气，可有手工按需修改
+    monitored_conditions:
+      - temperature        #气温
+      - precipitation      #雨量
+      - windSpeed          #风速
+      - pressure           #气压
+      - windDirection      #风向
+      - humidity           #湿度
+  - platform: mqtt
+    state_topic: "home/bedroom/sensor0/state"
+    name: "sensors"
+    unit_of_measurement: "℃"
+#    value_template: '{{ value_json.batt }}'
+mqtt:
+  discovery: true
+  broker: test.mosquitto.org
+  port: 1883
+switch:
+  - platform: mqtt
+    name: "switch0"
+    state_topic: "home/bedroom/switch0/state"
+    command_topic: "home/bedroom/switch0/set"
+#    availability_topic: "home/bedroom/switch0/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch1"
+    state_topic: "home/bedroom/switch1/state"
+    command_topic: "home/bedroom/switch1/set"
+#    availability_topic: "home/bedroom/switch1/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch2"
+    state_topic: "home/bedroom/switch2/state"
+    command_topic: "home/bedroom/switch2/set"
+#    availability_topic: "home/bedroom/switch2/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch3"
+    state_topic: "home/bedroom/switch3/state"
+    command_topic: "home/bedroom/switch3/set"
+#    availability_topic: "home/bedroom/switch3/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch4"
+    state_topic: "home/bedroom/switch4/state"
+    command_topic: "home/bedroom/switch4/set"
+#    availability_topic: "home/bedroom/switch4/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch5"
+    state_topic: "home/bedroom/switch5/state"
+    command_topic: "home/bedroom/switch5/set"
+#    availability_topic: "home/bedroom/switch5/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch6"
+    state_topic: "home/bedroom/switch6/state"
+    command_topic: "home/bedroom/switch6/set"
+#    availability_topic: "home/bedroom/switch6/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+  - platform: mqtt
+    name: "switch7"
+    state_topic: "home/bedroom/switch7/state"
+    command_topic: "home/bedroom/switch7/set"
+#    availability_topic: "home/bedroom/switch7/available"
+    payload_on: "ON"
+    payload_off: "OFF"
+    optimistic: false
+    qos: 0
+    retain: true
+# Text to speech
+tts:
+  - platform: google
+homekit:
+  auto_start: true
+group: !include groups.yaml
+automation: !include automations.yaml
+script: !include scripts.yaml
+
